@@ -1,0 +1,102 @@
+SELECT 
+
+sl.created_date_time__c as Form_Fill_Creation_Date,
+       to_char(sl.created_date_time__c, 'yyyy-mm') as Form_Fill_creation_Month,
+       sl.lead_id_mc__c as Lead_ID_Form_Fill,
+       
+       sl2.created_date_time__c as Lead_Creation_Date,
+       to_char(sl2.created_date_time__c, 'yyyy-mm') as Lead_creation_Month,
+       sl2.lead_id_mc__c as Lead_ID,
+       
+       sl.ga_campaign__c as Campaign,
+       sl.ga_medium__c as Lead_Acquisition,
+       sl.ga_source__c as Channel,
+       sl.lead_source_country__c as Country,
+       sl.leads_source_website__c as Lead_Source,
+       
+       sl2.lead_age_days__c as Lead_Age, --Find out
+       sl2.timetillleadwascontacted__c as Response_Time, --From lead creation to first response time
+       sl2.lead_stage__c as Lead_Stage,
+       sl2.lead_status_custom__c as Lead_status,
+           
+       sl3.lead_id_mc__c as Lead_ID_Marketing_Qualified,
+       
+       slh.createddate as SQL_Date,
+       to_char(slh.createddate, 'yyyy-mm') as SQL_Month,
+       slh.leadid as Lead_ID_Sales_Qualified,
+       slh.field as Status_change_type,
+       slh.newvalue as Status_change,
+       
+       slh2.createddate as Quote_Sent_Date,
+       to_char(slh2.createddate, 'yyyy-mm') as Quote_Sent_Month,
+       slh2.leadid as Lead_ID_Quote_Sent,
+       
+       slh3.createddate as Quote_Accepted_Date,
+       to_char(slh3.createddate, 'yyyy-mm') as Quote_Accepted_Month,
+       slh3.leadid as Lead_ID_Quote_Accepted,
+       
+       sl5.close_date__c as Close_Date,
+       to_char(sl5.close_date__c, 'yyyy-mm') as Close_Month,
+       sl5.lead_id_mc__c as Lead_ID_Deal,
+       sl5.type_of_contract__c as Contract_Type,
+       
+       pb."Lead_ID__c" as Lead_ID_Subscriber,
+       sl5.license_duration__c as License_Length,
+       sl5.license_fee_net__c as MRR_Net, --Find out - different to contracted MRR
+       pb.hardware_price_net_eur__c as Hardware_revenue,
+       pb."Monthly_fee_gross__c" as Contracted_MRR,
+       sl5.pos_boxes__c as POS_Box,
+       pb.boxid__c as Box_ID,
+       pb.sf_created_date as Update_Date, --POS Box creation
+       
+       
+       pb.account_id as Account_ID,
+       pb.dispatch_date__c as Date_dispatched,
+       sl5.box_welcome_call_date__c as Date_Welcome_Call,
+       sl5.status_posbox__c as POSBOX_Status,
+       
+       pb.cancellation_date__c as Cancellation_Date,
+       pb2."Lead_ID__c" as Lead_ID_Churn
+       
+       pb.status__c as Current_status, --Paused or cancelled in here, group by cancellation date
+       
+FROM  salesforce.salesforce_leads sl
+
+    --Leads designed POS Team
+FULL JOIN salesforce.salesforce_leads sl2 on sl.lead_id_mc__c = sl2.lead_id_mc__c and
+ sl2.ownerid in ('0052p00000AAtARAA1', '0052p00000A4KoLAAV', '00557000007zg2tAAA', '00557000007n4JxAAI', '0052p00000BhWnVAAV')
+ 
+    --Marketing qualified leads
+left join salesforce.salesforce_leads sl3 on sl2.lead_id_mc__c = sl3.lead_id_mc__c and
+(sl3.lead_status_custom__c not in ('Invalid Contact data', 'Missing functionality', 'Duplicate', 'Never reached', 'Invalid Business type') and sl3.lead_stage__c <> 'Forwarded' )
+
+    --Sales qualified Leads
+left join salesforce.sf_leads_history slh  on sl3.lead_id_mc__c = slh.leadid
+and slh.field in ('Lead_Status_Custom__c', 'Lead_Stage__c', 'Owner')
+and slh.newvalue in ('Pre-qualified', 'Qualified', 'In Progress', 'Deal pending, contract sent', 'Jav Alleciardi', 'Doron Skurnik', 'Lukas Csepregi')
+
+    --Quote Sent
+left join salesforce.sf_leads_history slh2  on slh.leadid = slh2.leadid
+and slh2.field in ('Lead_Status_Custom__c')
+and slh2.newvalue in ('In Progress', 'Deal pending, contract sent')
+
+     --Quote accepted
+left join salesforce.sf_leads_history slh3  on slh2.leadid = slh3.leadid
+and slh3.field in ('Lead_Status_Custom__c')
+and slh3.newvalue in ('Deal pending, contract sent')
+    
+    --Deals
+left join salesforce.salesforce_leads sl5 on slh3.leadid = sl5.lead_id_mc__c and
+sl5.lead_stage__c = 'Closed' and sl5.lead_status_custom__c = 'Deal'
+
+    --Subscriptions
+left join salesforce.sf_pos_boxes pb on sl5.lead_id_mc__c = pb."Lead_ID__c"
+                                            and pb.type_of_contract__c not like 'Hardware only'
+
+    --Churn
+left join salesforce.sf_pos_boxes pb2 on pb."Lead_ID__c" = pb2."Lead_ID__c" and pb2.status__c = 'License contract cancelled'
+
+where 
+sl.leads_source_website__c LIKE '%POS%'
+and sl.leads_source_website__c not like '%POSBOX%'
+and sl.lead_source_country__c <> 'GB'
