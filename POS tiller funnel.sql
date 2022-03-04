@@ -1,0 +1,1 @@
+select * from sumup_dwh_prod.src_salesforce.lead limit 10
